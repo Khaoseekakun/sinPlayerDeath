@@ -1,0 +1,4 @@
+org\sinPlayerDeath\commands\reload.class
+org\sinPlayerDeath\SinPlayerDeath.class
+org\sinPlayerDeath\events\playerDeath.class
+org\sinPlayerDeath\untils\Color.class

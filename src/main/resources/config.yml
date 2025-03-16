@@ -1,0 +1,15 @@
+config_version: 1
+
+# 0.2 = 20%
+exp_lost: 0.2
+
+#permission
+# "sinPlayerDeath.no_drop_all"
+has_permission_no_drop: true
+
+messages:
+  reload: "&aReload plugin success"
+  no_permission: "&cYou not have permissions"
+
+item_no_drop:
+  - "DIAMOND"
