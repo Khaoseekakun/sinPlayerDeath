@@ -3,8 +3,8 @@ version: '1.0.0'
 main: org.sinPlayerDeath.SinPlayerDeath
 api-version: '1.21'
 commands:
-  reload:
+  sinpd:
     description: Reload config plugin
-    usage: /reload
+    usage: /spreload
     permission: sinPlayerDeath.reload
     permission-message: You do not have permission
