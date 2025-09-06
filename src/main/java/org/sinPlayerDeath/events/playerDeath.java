@@ -105,68 +105,70 @@ public class playerDeath implements Listener {
 
         List<ItemStack> item_drops = event.getDrops();
 
+        if(player.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY)){
+            return;
+        }
+
         if (SinPlayerDeath.config.getBoolean("has_permission_no_drop") && player.hasPermission("sinplayerdeath.no_drop_all")) {
+            event.getDrops().clear();
             event.setKeepInventory(true);
-            return;
-        }
+            event.setDroppedExp(0);
+        }else{
 
-        if(Boolean.TRUE.equals(player.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY))){
-            return;
-        }
+            List<String> noDropItems = SinPlayerDeath.config.getStringList("item_no_drop");
+            Inventory old_Inventory = Bukkit.createInventory(null, 36);
+            Iterator<ItemStack> iterator = item_drops.iterator();
 
-        List<String> noDropItems = SinPlayerDeath.config.getStringList("item_no_drop");
-        Inventory old_Inventory = Bukkit.createInventory(null, 36);
-        Iterator<ItemStack> iterator = item_drops.iterator();
+            while (iterator.hasNext()) {
+                ItemStack dropItem = iterator.next();
+                if (dropItem == null) continue;
 
-        while (iterator.hasNext()) {
-            ItemStack dropItem = iterator.next();
-            if (dropItem == null) continue;
+                boolean shouldNotDrop = noDropItems.contains(dropItem.getType().toString()) || hasNoDropTag(dropItem);
 
-            boolean shouldNotDrop = noDropItems.contains(dropItem.getType().toString()) || hasNoDropTag(dropItem);
+                if (shouldNotDrop) {
+                    if (dropItem.getType().toString().contains("HELMET")) {
+                        ItemStack currentHelmet = player.getInventory().getHelmet();
+                        if (currentHelmet != null && currentHelmet.isSimilar(dropItem)) {
+                            saveHELMET.put(uuid, dropItem);
+                        } else {
+                            old_Inventory.addItem(dropItem);
+                        }
+                    } else if (dropItem.getType().toString().contains("CHESTPLATE")) {
+                        ItemStack currentChestplate = player.getInventory().getChestplate();
+                        if (currentChestplate != null && currentChestplate.isSimilar(dropItem)) {
+                            saveCHESTPLATE.put(uuid, dropItem);
+                        } else {
+                            old_Inventory.addItem(dropItem);
+                        }
+                    } else if (dropItem.getType().toString().contains("LEGGINGS")) {
+                        ItemStack currentLeggings = player.getInventory().getLeggings();
+                        if (currentLeggings != null && currentLeggings.isSimilar(dropItem)) {
+                            saveLEGGINGS.put(uuid, dropItem);
+                        } else {
+                            old_Inventory.addItem(dropItem);
+                        }
+                    } else if (dropItem.getType().toString().contains("BOOTS")) {
+                        ItemStack currentBoots = player.getInventory().getBoots();
+                        if (currentBoots != null && currentBoots.isSimilar(dropItem)) {
+                            saveBOOTS.put(uuid, dropItem);
+                        } else {
+                            old_Inventory.addItem(dropItem);
+                        }
+                    } else {
+                        ItemStack itemInOffHand = player.getInventory().getItemInOffHand();
+                        if (itemInOffHand != null && itemInOffHand.isSimilar(dropItem)) {
+                            saveLeftHand.put(uuid, dropItem);
+                        } else {
+                            old_Inventory.addItem(dropItem);
+                        }
+                    }
 
-            if (!shouldNotDrop) {
-                if (dropItem.getType().toString().contains("HELMET")) {
-                    ItemStack currentHelmet = player.getInventory().getHelmet();
-                    if (currentHelmet != null && currentHelmet.isSimilar(dropItem)) {
-                        saveHELMET.put(uuid, dropItem);
-                    } else {
-                        old_Inventory.addItem(dropItem);
-                    }
-                } else if (dropItem.getType().toString().contains("CHESTPLATE")) {
-                    ItemStack currentChestplate = player.getInventory().getChestplate();
-                    if (currentChestplate != null && currentChestplate.isSimilar(dropItem)) {
-                        saveCHESTPLATE.put(uuid, dropItem);
-                    } else {
-                        old_Inventory.addItem(dropItem);
-                    }
-                } else if (dropItem.getType().toString().contains("LEGGINGS")) {
-                    ItemStack currentLeggings = player.getInventory().getLeggings();
-                    if (currentLeggings != null && currentLeggings.isSimilar(dropItem)) {
-                        saveLEGGINGS.put(uuid, dropItem);
-                    } else {
-                        old_Inventory.addItem(dropItem);
-                    }
-                } else if (dropItem.getType().toString().contains("BOOTS")) {
-                    ItemStack currentBoots = player.getInventory().getBoots();
-                    if (currentBoots != null && currentBoots.isSimilar(dropItem)) {
-                        saveBOOTS.put(uuid, dropItem);
-                    } else {
-                        old_Inventory.addItem(dropItem);
-                    }
-                } else {
-                    ItemStack itemInOffHand = player.getInventory().getItemInOffHand();
-                    if (itemInOffHand != null && itemInOffHand.isSimilar(dropItem)) {
-                        saveLeftHand.put(uuid, dropItem);
-                    } else {
-                        old_Inventory.addItem(dropItem);
-                    }
+                    iterator.remove(); // ✅ Prevent from dropping
                 }
-
-                iterator.remove(); // ✅ Prevent from dropping
             }
-        }
 
-        savedInventories.put(uuid, old_Inventory);
+            savedInventories.put(uuid, old_Inventory);
+        }
     }
 
     private double getMoneyLossPercentage(Player player) {
