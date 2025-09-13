@@ -7,6 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.sinPlayerDeath.commands.reload;
 import org.sinPlayerDeath.events.playerDeath;
 import net.milkbowl.vault.economy.Economy;
+import org.sinPlayerDeath.manager.PlayerDataManager;
 
 import java.util.Objects;
 
@@ -15,6 +16,7 @@ public final class SinPlayerDeath extends JavaPlugin {
     public static FileConfiguration config;
     private static Economy econ = null;
     private static SinPlayerDeath instance;
+    private static PlayerDataManager playerDataManager;
 
     @Override
     public void onEnable() {
@@ -32,16 +34,24 @@ public final class SinPlayerDeath extends JavaPlugin {
         }
 
         // Register command
-        Objects.requireNonNull(getCommand("sinpd")).setExecutor(new reload());
-
+        Objects.requireNonNull(getCommand("playerdeath")).setExecutor(new reload());
+        Objects.requireNonNull(getCommand("playerdeath")).setTabCompleter(new reload());
         // Register events
         getServer().getPluginManager().registerEvents(new playerDeath(), this);
 
+        playerDataManager = new PlayerDataManager(this);
+        if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            new PKPlaceholdersExpansion(this).register();
+        }
+
+        playerDataManager.startAutoSave();
+        new TabUpdater(this).startTabUpdateTask();
         getLogger().info("SinPlayerDeath enabled successfully.");
     }
 
     @Override
     public void onDisable() {
+        playerDataManager.saveAll();
         getLogger().info("SinPlayerDeath disabled.");
     }
 
@@ -54,14 +64,20 @@ public final class SinPlayerDeath extends JavaPlugin {
             return false;
         }
         econ = rsp.getProvider();
-        return econ != null;
+        return true;
     }
 
     public static Economy getEconomy() {
         return econ;
     }
-
+    public static FileConfiguration getPluginConfig() {
+        return config;
+    }
     public static SinPlayerDeath getInstance() {
         return instance;
+    }
+
+    public static PlayerDataManager getPlayerDataManager() {
+        return playerDataManager;
     }
 }

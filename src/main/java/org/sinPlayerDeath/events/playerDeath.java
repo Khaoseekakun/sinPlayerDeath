@@ -6,13 +6,19 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.permissions.PermissionAttachment;
 import org.sinPlayerDeath.SinPlayerDeath;
+import org.sinPlayerDeath.manager.PlayerData;
 import org.sinPlayerDeath.untils.Color;
+import org.sinPlayerDeath.untils.RegionUtils;
 
 import java.util.*;
 
@@ -32,11 +38,63 @@ public class playerDeath implements Listener {
         this.econ = SinPlayerDeath.getEconomy(); // get Vault econ from your main class
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+
+        PlayerData victimData = SinPlayerDeath.getPlayerDataManager().getData(victim.getUniqueId());
+
+        if (victimData.getPKStatus()) {
+            // ยกเลิกการ cancel ของ event ทั้งหมด
+            event.setCancelled(false);
+        }
+    }
+
+    private void handleInventoryDrops(PlayerDeathEvent event, Player player) {
+        UUID uuid = player.getUniqueId();
+        List<ItemStack> drops = event.getDrops();
+        List<String> noDropItems = SinPlayerDeath.config.getStringList("item_no_drop");
+        Inventory oldInventory = Bukkit.createInventory(null, 36);
+
+        Iterator<ItemStack> iterator = drops.iterator();
+        while (iterator.hasNext()) {
+            ItemStack dropItem = iterator.next();
+            if (dropItem == null) continue;
+
+            boolean shouldNotDrop = noDropItems.contains(dropItem.getType().toString()) || hasNoDropTag(dropItem);
+
+            if (shouldNotDrop) {
+                // ตรวจสอบ armor & offhand
+                switch (dropItem.getType().toString()) {
+                    case "DIAMOND_HELMET", "IRON_HELMET", "GOLD_HELMET", "CHAINMAIL_HELMET", "LEATHER_HELMET" ->
+                            saveHELMET.put(uuid, dropItem);
+                    case "DIAMOND_CHESTPLATE", "IRON_CHESTPLATE", "GOLD_CHESTPLATE", "CHAINMAIL_CHESTPLATE", "LEATHER_CHESTPLATE" ->
+                            saveCHESTPLATE.put(uuid, dropItem);
+                    case "DIAMOND_LEGGINGS", "IRON_LEGGINGS", "GOLD_LEGGINGS", "CHAINMAIL_LEGGINGS", "LEATHER_LEGGINGS" ->
+                            saveLEGGINGS.put(uuid, dropItem);
+                    case "DIAMOND_BOOTS", "IRON_BOOTS", "GOLD_BOOTS", "CHAINMAIL_BOOTS", "LEATHER_BOOTS" ->
+                            saveBOOTS.put(uuid, dropItem);
+                    default -> {
+                        if (player.getInventory().getItemInOffHand() != null && player.getInventory().getItemInOffHand().isSimilar(dropItem)) {
+                            saveLeftHand.put(uuid, dropItem);
+                        } else {
+                            oldInventory.addItem(dropItem);
+                        }
+                    }
+                }
+                iterator.remove(); // ป้องกันการดรอป
+            }
+        }
+
+        savedInventories.put(uuid, oldInventory);
+    }
+
+
     // ✅ Helper: check if item has "no_drop" NBT tag
     private boolean hasNoDropTag(ItemStack item) {
         if (item == null) return false;
         NBTItem nbt = new NBTItem(item);
-        return nbt.hasKey("no_drop") && nbt.getBoolean("no_drop");
+        return nbt.hasKey("no_drop") && (nbt.getBoolean("no_drop") || nbt.getInteger("no_drop") == 1);
     }
 
     @EventHandler
@@ -86,99 +144,144 @@ public class playerDeath implements Listener {
     }
 
     @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        UUID uuid = event.getPlayer().getUniqueId();
+        PlayerData data = SinPlayerDeath.getPlayerDataManager().getData(uuid);
+
+        if (data != null && data.getPKStatus()) {
+            data.updatePKPermissions(); // sync permission ตอน login
+        }
+    }
+    @EventHandler
+    public void onPlayerQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        UUID uuid = event.getPlayer().getUniqueId();
+        PermissionAttachment attachment = PlayerData.getAttachments().remove(uuid);
+        if (attachment != null) {
+            attachment.remove(); // ลบ attachment ออกจาก player
+        }
+    }
+    @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
+
         Player player = event.getEntity();
-        UUID uuid = player.getUniqueId();
+        Player killer = player.getKiller();
+        UUID playerId = player.getUniqueId();
+        double balance = econ.getBalance(player);
+        PlayerData deathData = SinPlayerDeath.getPlayerDataManager().getData(playerId);
 
-        savedEXP.put(uuid, player.getTotalExperience());
+        // ตรวจสอบ region PvP
+        boolean isInAllowedPvp = new RegionUtils().isInAllowedPvpRegion(player);
 
-        if (econ != null) {
-            double balance = econ.getBalance(player);
+        boolean pkStatus = false; // ผู้ตายเป็น PK หรือไม่ สำหรับ logic bounty
+
+        if (killer != null) {
+            PlayerData killerData = SinPlayerDeath.getPlayerDataManager().getData(killer.getUniqueId());
+
+            if (isInAllowedPvp) {
+                event.setKeepInventory(true);
+                return;
+            } else {
+                // PK logic ปกติ
+                if (deathData.getPKStatus()) {
+                    // ผู้ตายเป็น PK → ผู้ฆ่าไม่ติด PK, ได้ bounty
+                    pkStatus = true;
+                    killer.sendMessage(Color.ChangeColor(
+                            SinPlayerDeath.config.getString("messages.kill_pk_player",
+                                            "§aYou killed §c{player} §aand you did not get PK point because he is PK player")
+                                    .replace("{player}", player.getName()))
+                    );
+
+                    // จ่าย bounty
+                    double bounty = deathData.getPkTotalKills() * SinPlayerDeath.config.getDouble("bounty_per_kill", 100.0);
+
+                        if(balance < bounty){
+                            if(balance <= 0) {
+                                bounty = 0;
+                            } else {
+                                bounty = balance;
+                            }
+                        }
+
+                        econ.depositPlayer(killer, bounty);
+
+                        String cmiCommand = "money take " + player.getName() + " " + bounty + " -s";
+
+                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmiCommand);
+
+                        killer.sendMessage(Color.ChangeColor(
+                                SinPlayerDeath.config.getString("messages.bounty_paid",
+                                                "§aYou received a bounty of {bounty} for killing {player}")
+                                        .replace("{player}", player.getName())
+                                        .replace("{bounty}", String.format("%.2f", bounty))
+                        ));
+
+                    // reset PK ของผู้ตาย
+                    deathData.setPKStatus(false);
+                } else {
+                    // ผู้ตายไม่ใช่ PK → normal PK logic
+                    killerData.setPKStatus(true);
+                    killerData.addPkTotalKills(1);
+                }
+
+                SinPlayerDeath.getPlayerDataManager().saveData(killer.getUniqueId());
+            }
+        }
+
+        // บันทึก XP
+        savedEXP.put(playerId, player.getTotalExperience());
+
+        // เงิน
             double percent = getMoneyLossPercentage(player);
             double lostMoney = balance * percent;
-            econ.withdrawPlayer(player, lostMoney);
-            String msgTemplate = SinPlayerDeath.config.getString("messages.money_lost",
-                    "§cTake money for you {money_take} because you die");
-            String msg = msgTemplate.replace("{money_take}", String.format("%.2f", lostMoney));
+
+            // ถ้าเป็น PK ผู้ตาย → bounty คำนวณแล้วข้างบน
+            if (!isInAllowedPvp && pkStatus) {
+                // ไม่หักซ้ำ
+                lostMoney = balance * percent;
+            }
+
+            String cmiCommand = "money take " + player.getName() + " " + lostMoney + " -s";
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmiCommand);
+
+            String msg = SinPlayerDeath.config.getString("messages.money_lost",
+                    "§cTake money for you {money_take} because you die").replace("{money_take}", String.format("%.2f", lostMoney));
             player.sendMessage(Color.ChangeColor(msg));
-        }
 
-        List<ItemStack> item_drops = event.getDrops();
-
-        if(player.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY)){
-            return;
-        }
+        // ไอเท็ม
+        if (Boolean.TRUE.equals(player.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY))) return;
 
         if (SinPlayerDeath.config.getBoolean("has_permission_no_drop") && player.hasPermission("sinplayerdeath.no_drop_all")) {
             event.getDrops().clear();
             event.setKeepInventory(true);
             event.setDroppedExp(0);
-        }else{
-
-            List<String> noDropItems = SinPlayerDeath.config.getStringList("item_no_drop");
-            Inventory old_Inventory = Bukkit.createInventory(null, 36);
-            Iterator<ItemStack> iterator = item_drops.iterator();
-
-            while (iterator.hasNext()) {
-                ItemStack dropItem = iterator.next();
-                if (dropItem == null) continue;
-
-                boolean shouldNotDrop = noDropItems.contains(dropItem.getType().toString()) || hasNoDropTag(dropItem);
-
-                if (shouldNotDrop) {
-                    if (dropItem.getType().toString().contains("HELMET")) {
-                        ItemStack currentHelmet = player.getInventory().getHelmet();
-                        if (currentHelmet != null && currentHelmet.isSimilar(dropItem)) {
-                            saveHELMET.put(uuid, dropItem);
-                        } else {
-                            old_Inventory.addItem(dropItem);
-                        }
-                    } else if (dropItem.getType().toString().contains("CHESTPLATE")) {
-                        ItemStack currentChestplate = player.getInventory().getChestplate();
-                        if (currentChestplate != null && currentChestplate.isSimilar(dropItem)) {
-                            saveCHESTPLATE.put(uuid, dropItem);
-                        } else {
-                            old_Inventory.addItem(dropItem);
-                        }
-                    } else if (dropItem.getType().toString().contains("LEGGINGS")) {
-                        ItemStack currentLeggings = player.getInventory().getLeggings();
-                        if (currentLeggings != null && currentLeggings.isSimilar(dropItem)) {
-                            saveLEGGINGS.put(uuid, dropItem);
-                        } else {
-                            old_Inventory.addItem(dropItem);
-                        }
-                    } else if (dropItem.getType().toString().contains("BOOTS")) {
-                        ItemStack currentBoots = player.getInventory().getBoots();
-                        if (currentBoots != null && currentBoots.isSimilar(dropItem)) {
-                            saveBOOTS.put(uuid, dropItem);
-                        } else {
-                            old_Inventory.addItem(dropItem);
-                        }
-                    } else {
-                        ItemStack itemInOffHand = player.getInventory().getItemInOffHand();
-                        if (itemInOffHand != null && itemInOffHand.isSimilar(dropItem)) {
-                            saveLeftHand.put(uuid, dropItem);
-                        } else {
-                            old_Inventory.addItem(dropItem);
-                        }
-                    }
-
-                    iterator.remove(); // ✅ Prevent from dropping
-                }
-            }
-
-            savedInventories.put(uuid, old_Inventory);
+        } else {
+            handleInventoryDrops(event, player);
         }
     }
 
     private double getMoneyLossPercentage(Player player) {
+        PlayerData deathData = SinPlayerDeath.getPlayerDataManager().getData(player.getUniqueId());
         Map<String, Object> moneyLossSection = SinPlayerDeath.config.getConfigurationSection("money_lost").getValues(false);
+        double pkLostDefault = 0;
+        if (deathData.getPKStatus()) {
+            if(deathData.getPKLevel() == 1){
+                pkLostDefault = SinPlayerDeath.config.getDouble("pk_lost.pk_level_1", 0.1);
+            }
+            if(deathData.getPKLevel() == 2){
+                pkLostDefault = SinPlayerDeath.config.getDouble("pk_lost.pk_level_2", 0.2);
+            }
+            if(deathData.getPKLevel() == 3){
+                pkLostDefault = SinPlayerDeath.config.getDouble("pk_lost.pk_level_3", 0.3);
+            }
+        }
 
         for (String key : moneyLossSection.keySet()) {
             if (!key.equalsIgnoreCase("default") && player.hasPermission("group." + key)) {
-                return SinPlayerDeath.config.getDouble("money_lost." + key, SinPlayerDeath.config.getDouble("money_lost.default", 0.1));
+                return SinPlayerDeath.config.getDouble("money_lost." + key, SinPlayerDeath.config.getDouble("money_lost.default", 0.1))+pkLostDefault;
             }
         }
-        return SinPlayerDeath.config.getDouble("money_lost.default", 0.1);
+
+        return SinPlayerDeath.config.getDouble("money_lost.default", 0.1)+pkLostDefault;
+
     }
 }

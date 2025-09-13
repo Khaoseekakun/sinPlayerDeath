@@ -1,10 +1,33 @@
 name: sinPlayerDeath
-version: '1.0.0'
+version: '1.1'
 main: org.sinPlayerDeath.SinPlayerDeath
 api-version: '1.21'
+
 commands:
-  sinpd:
-    description: Reload config plugin
-    usage: /spreload
-    permission: sinPlayerDeath.reload
-    permission-message: You do not have permission
+  playerdeath:
+    description: Main command for sinPlayerDeath (reload, pk-reset, all-reset, setpklevel, setpkkills)
+    usage: /playerdeath <reload|pk-reset|all-reset|setpklevel|setpkkills> [player] [value]
+    aliases: [sinpd, spd, pd]
+    permission: sinplayerdeath.use
+    permission-message: "&cYou do not have permission to use this command."
+
+permissions:
+  sinplayerdeath.use:
+    description: Allow use of /sinplayerdeath base command
+    default: op
+
+  sinplayerdeath.reload:
+    description: Allow reloading the plugin config
+    default: op
+
+  sinplayerdeath.admin.reset:
+    description: Allow resetting player data (pk-reset and all-reset)
+    default: op
+
+  sinplayerdeath.admin.setpk:
+    description: Allow setting PK level of a player
+    default: op
+
+  sinplayerdeath.admin.setpkkills:
+    description: Allow setting PK kills of a player
+    default: op

@@ -1,4 +1,9 @@
+org\sinPlayerDeath\manager\PlayerData.class
 org\sinPlayerDeath\commands\reload.class
+org\sinPlayerDeath\TabUpdater.class
+org\sinPlayerDeath\untils\RegionUtils.class
+org\sinPlayerDeath\untils\Color.class
+org\sinPlayerDeath\PKPlaceholdersExpansion.class
 org\sinPlayerDeath\SinPlayerDeath.class
 org\sinPlayerDeath\events\playerDeath.class
-org\sinPlayerDeath\untils\Color.class
+org\sinPlayerDeath\manager\PlayerDataManager.class

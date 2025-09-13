@@ -1,22 +1,70 @@
 config_version: 1
 
-# 0.2 = 20%
-exp_lost: 0.2
+# การเสีย XP เมื่อผู้เล่นตาย
+exp_lost: 0.2  # 0.2 = 20%
 
+# การเสียเงินเมื่อผู้เล่นตาย
 money_lost:
   default: 0.1   # 10%
   vip: 0.05      # 5%
   svip: 0.02     # 2%
   mvp: 0.01      # 1%
 
-#permission
+# permission
 # "sinPlayerDeath.no_drop_all"
 has_permission_no_drop: true
 
+# ค่าหัวต่อการฆ่า PK player
+bounty_per_kill: 250
+
+# Placeholders สำหรับ PK level
+placeholders:
+  pklevel1: "&e[PK Level 1]"
+  pklevel2: "&6[PK Level 2]"
+  pklevel3: "&c[PK Level 3]"
+  pk_status_active: "&c[PK Active]"
+  pk_status_inactive: "&a[PK Inactive]"
+
+# การหักเงินเพิ่มตาม PK level
+pk_lost:
+  pklevel1: 0.1   # +10%
+  pklevel2: 0.2   # +20%
+  pklevel3: 0.3   # +30%
+
+# การอัพ PK level
+pk_upLevel:
+  pklevel1: 1
+  pklevel2: 10
+  pklevel3: 30
+
+# พื้นที่ PvP ที่อนุญาตให้ PK ทำงานไม่ถูกบังคับ
+region_allow_pvp:
+  - "pvp_zone"
+
+# ข้อความต่าง ๆ
 messages:
   reload: "&aReload plugin success"
-  no_permission: "&cYou not have permissions"
+  no_permission: "&cYou do not have permissions"
   money_lost: "§cTake money for you {money_take} because you die"
-
+  bounty_paid: "§aYou received a bounty of {bounty} for killing {player}"
+  reset_player: "§a{player} PK level has been reset to 0"
+  reset_pk_status: "§a{player} PK status has been reset to 0"
+  kill_pk_player: "§aYou killed §c{player} §aand you did not get PK point because he is PK player"
+  player_not_found: "&cPlayer not found."
+  usage_reload: "&cUsage: /sinplayerdeath reload"
+  usage_all_reset: "&cUsage: /sinplayerdeath all-reset <player>"
+  usage_pk_reset: "&cUsage: /sinplayerdeath pk-reset <player>"
+  usage_setpklevel: "&cUsage: /sinplayerdeath setpklevel <player> <level>"
+  usage_setpkkills: "&cUsage: /sinplayerdeath setpkkills <player> <kills>"
+  set_pk_level: "&aSet PK level of {player} to {level}."
+  set_pk_kills: "&aSet PK kills of {player} to {kills}."
+  number_required: "&c{type} must be a number."
+  unknown_subcommand: "&cUnknown subcommand."
+# รายการไอเท็มที่ไม่สามารถดรอปได้
 item_no_drop:
   - "DIAMOND"
+  - "DIAMOND_SWORD"
+  - "DIAMOND_HELMET"
+  - "DIAMOND_CHESTPLATE"
+  - "DIAMOND_LEGGINGS"
+  - "DIAMOND_BOOTS"
